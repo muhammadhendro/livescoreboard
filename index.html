@@ -1,0 +1,2366 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modern CTF Scoreboard</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
+    <script src="https://unpkg.com/framer-motion@10/dist/framer-motion.umd.js"></script>
+    <script src="https://unpkg.com/lucide-react@0.314.0/dist/umd/lucide-react.min.js"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap");
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Rajdhani", "Orbitron", -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "Roboto", sans-serif;
+        background: radial-gradient(
+            circle at 20% 80%,
+            rgba(120, 119, 198, 0.3) 0%,
+            transparent 50%
+          ),
+          radial-gradient(
+            circle at 80% 20%,
+            rgba(255, 119, 198, 0.3) 0%,
+            transparent 50%
+          ),
+          radial-gradient(
+            circle at 40% 40%,
+            rgba(120, 219, 255, 0.2) 0%,
+            transparent 50%
+          ),
+          linear-gradient(
+            135deg,
+            #0a0a0a 0%,
+            #1a1a2e 25%,
+            #16213e 50%,
+            #0f3460 75%,
+            #0a0a0a 100%
+          );
+        background-size: 400% 400%, 300% 300%, 200% 200%, 400% 400%;
+        animation: gradientShift 25s ease infinite;
+        overflow-x: hidden;
+        overflow-y: auto;
+        position: relative;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 2px,
+          rgba(0, 255, 0, 0.03) 2px,
+          rgba(0, 255, 0, 0.03) 4px
+        );
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .hacker-grid {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: linear-gradient(
+            rgba(0, 255, 0, 0.1) 1px,
+            transparent 1px
+          ),
+          linear-gradient(90deg, rgba(0, 255, 0, 0.1) 1px, transparent 1px);
+        background-size: 50px 50px;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      @keyframes gradientShift {
+        0%,
+        100% {
+          background-position: 0% 50%, 0% 0%, 0% 0%, 0% 50%;
+        }
+        25% {
+          background-position: 100% 50%, 100% 0%, 50% 50%, 25% 75%;
+        }
+        50% {
+          background-position: 50% 100%, 50% 100%, 100% 100%, 50% 100%;
+        }
+        75% {
+          background-position: 0% 50%, 0% 100%, 50% 0%, 75% 25%;
+        }
+      }
+
+      @keyframes neonPulse {
+        0%,
+        100% {
+          text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00, 0 0 15px #00ff00,
+            0 0 20px #00ff00;
+        }
+        50% {
+          text-shadow: 0 0 2px #00ff00, 0 0 5px #00ff00, 0 0 8px #00ff00,
+            0 0 12px #00ff00;
+        }
+      }
+
+      @keyframes cyberGlow {
+        0%,
+        100% {
+          box-shadow: 0 0 5px #00ffff, 0 0 10px #00ffff, 0 0 15px #00ffff;
+        }
+        50% {
+          box-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 30px #ff00ff;
+        }
+      }
+
+      @keyframes glow {
+        0%,
+        100% {
+          box-shadow: 0 0 20px rgba(0, 255, 255, 0.5),
+            0 0 40px rgba(0, 255, 255, 0.3);
+        }
+        50% {
+          box-shadow: 0 0 30px rgba(255, 0, 255, 0.6),
+            0 0 60px rgba(255, 0, 255, 0.4);
+        }
+      }
+
+      .neon-text {
+        animation: neonPulse 2s ease-in-out infinite;
+      }
+
+      .cyber-glow {
+        animation: cyberGlow 2s ease-in-out infinite;
+      }
+
+      .glow-animation {
+        animation: glow 3s ease-in-out infinite;
+      }
+
+      .cyber-border {
+        position: relative;
+        border: 2px solid #00ffff;
+        border-radius: 10px;
+        background: linear-gradient(
+          45deg,
+          rgba(0, 255, 255, 0.1),
+          rgba(255, 0, 255, 0.1)
+        );
+        animation: cyberGlow 2s ease-in-out infinite;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Hacker Grid Overlay -->
+    <div class="hacker-grid"></div>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useMemo, useRef } = window.React;
+      const FM =
+        window.framerMotion || window.Motion || window.FramerMotion || {};
+      let { motion, AnimatePresence, LayoutGroup } = FM;
+      if (!motion) {
+        const shim = new Proxy(
+          {},
+          {
+            get: (_t, tag) => (props) => window.React.createElement(tag, props),
+          }
+        );
+        motion = shim;
+      }
+      if (!AnimatePresence) {
+        AnimatePresence = ({ children }) => children;
+      }
+      if (!LayoutGroup) {
+        LayoutGroup = ({ children }) => children;
+      }
+      const {
+        Crown,
+        ArrowUpRight,
+        ArrowDownRight,
+        Minus,
+        Timer,
+        Activity,
+        Zap,
+        Trophy,
+        Signal,
+        Flame,
+        Star,
+        Sparkles,
+        Target,
+        TrendingUp,
+      } = window.LucideReact || {};
+      // Provide safe fallbacks for icons if lucide-react UMD fails
+      const FallbackIcon = (props) =>
+        window.React.createElement(
+          "span",
+          {
+            ...props,
+            style: {
+              display: "inline-block",
+              opacity: 0.6,
+              ...(props?.style || {}),
+            },
+          },
+          ""
+        );
+      const CrownIcon = Crown || FallbackIcon;
+      const ArrowUpRightIcon = ArrowUpRight || FallbackIcon;
+      const ArrowDownRightIcon = ArrowDownRight || FallbackIcon;
+      const MinusIcon = Minus || FallbackIcon;
+      const TimerIcon = Timer || FallbackIcon;
+      const ActivityIcon =
+        Activity ||
+        ((props) =>
+          React.createElement(
+            "span",
+            { ...props, className: "text-cyan-400 text-lg" },
+            "📊"
+          ));
+      const ZapIcon =
+        Zap ||
+        ((props) =>
+          React.createElement(
+            "span",
+            { ...props, className: "text-yellow-400 text-lg" },
+            "⚡"
+          ));
+      const TrophyIcon =
+        Trophy ||
+        ((props) =>
+          React.createElement(
+            "span",
+            { ...props, className: "text-amber-400 text-lg" },
+            "🏆"
+          ));
+      const SignalIcon =
+        Signal ||
+        ((props) =>
+          React.createElement(
+            "span",
+            { ...props, className: "text-fuchsia-400 text-lg" },
+            "📡"
+          ));
+      const FlameIcon =
+        Flame ||
+        ((props) =>
+          React.createElement(
+            "span",
+            { ...props, className: "text-fuchsia-400 text-lg" },
+            "🔥"
+          ));
+      const StarIcon =
+        Star ||
+        ((props) =>
+          React.createElement(
+            "span",
+            { ...props, className: "text-cyan-400 text-lg" },
+            "⭐"
+          ));
+      const SparklesIcon = Sparkles || FallbackIcon;
+      const TargetIcon = Target || FallbackIcon;
+      const TrendingUpIcon = TrendingUp || FallbackIcon;
+
+      let { LineChart, Line, ResponsiveContainer } = window.Recharts || {};
+      if (!LineChart || !Line || !ResponsiveContainer) {
+        // graceful fallback so the demo renders without Recharts
+        LineChart = (p) => window.React.createElement("div", p, p.children);
+        Line = () => null;
+        ResponsiveContainer = (p) =>
+          window.React.createElement("div", p, p.children);
+      }
+
+      function useQuery() {
+        const [params] = useState(
+          () => new URLSearchParams(window.location.search)
+        );
+        return (key, fallback) => params.get(key) ?? fallback;
+      }
+
+      function classNames(...xs) {
+        return xs.filter(Boolean).join(" ");
+      }
+
+      const neonGrad =
+        "bg-gradient-to-br from-cyan-500/30 via-fuchsia-500/20 to-amber-500/30";
+      const glassEffect = "backdrop-blur-xl bg-white/5 border border-white/10";
+      const glowEffect = "shadow-2xl shadow-cyan-500/20";
+      const modernGrad =
+        "bg-gradient-to-br from-slate-900/90 via-slate-800/80 to-slate-900/90";
+      const premiumGrad =
+        "bg-gradient-to-br from-slate-900/90 via-slate-800/80 to-slate-900/90";
+      const accentGrad =
+        "bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-amber-300";
+      const subtleGrad =
+        "bg-gradient-to-br from-slate-800/60 via-slate-700/40 to-slate-800/60";
+      const shimmerEffect =
+        "relative overflow-hidden before:absolute before:inset-0 before:-translate-x-full before:animate-shimmer before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent";
+
+      // Global history storage for Spark (accessible across rows)
+      if (!window.__scoreHistory) {
+        window.__scoreHistory = new Map(); // id -> [{t,score}]
+      }
+
+      function LiveCTFScoreboard() {
+        const q = useQuery();
+        const endpoint = q(
+          "endpoint",
+          "https://lappungctf.dev/api/v1/scoreboard"
+        );
+        const usersEndpoint = q("users", "https://lappungctf.dev/api/v1/users");
+        const overlay = q("overlay", "0") === "1";
+        const limit = parseInt(q("limit", "10"), 10);
+        const interval = parseInt(q("interval", "5000"), 10);
+        const wsUrl = q("ws", "");
+
+        const [teams, setTeams] = useState([]); // normalized rows
+        const [lastUpdated, setLastUpdated] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState("");
+        const [ticker, setTicker] = useState([]); // textual events of score ups
+
+        // Keep historical scores per team for sparkline (in-memory + mirror window.__scoreHistory)
+        const historyRef = useRef(new Map()); // id -> [{t,score}]
+        const prevRanksRef = useRef(new Map()); // id -> prevRank
+        const prevScoresRef = useRef(new Map()); // id -> prevScore
+
+        // Mirror internal history into global map on each render
+        useEffect(() => {
+          for (const [id, arr] of historyRef.current.entries()) {
+            window.__scoreHistory.set(id, arr);
+          }
+        });
+
+        // Fetcher: supports CTFd-like and generic array payloads
+        const parsePayload = (raw) => {
+          const arr = Array.isArray(raw)
+            ? raw
+            : raw?.data ?? raw?.scoreboard ?? raw?.standings ?? [];
+          if (!Array.isArray(arr)) return [];
+
+          const norm = arr.map((it, idx) => {
+            const id =
+              it.id ??
+              it.account_id ??
+              it.team_id ??
+              it.accountid ??
+              it.teamid ??
+              it.name ??
+              `row-${idx}`;
+            const name =
+              it.name ??
+              it.team ??
+              it.account_name ??
+              it.display_name ??
+              `Team ${idx + 1}`;
+            const score = Number(it.score ?? it.points ?? 0) || 0;
+            const pos = Number(it.rank ?? it.pos ?? it.place ?? 0) || 0;
+            return { id: String(id), name: String(name), score, pos };
+          });
+
+          // If no pos provided, compute by sorting desc score
+          const ranked = [...norm]
+            .sort((a, b) => b.score - a.score)
+            .map((r, i) => ({ ...r, pos: r.pos || i + 1 }));
+          return ranked;
+        };
+
+        const pushHistory = (rows) => {
+          const now = Date.now();
+          rows.forEach((r) => {
+            const h = historyRef.current.get(r.id) ?? [];
+            const last = h[h.length - 1];
+            if (!last || last.score !== r.score) {
+              const next = [...h, { t: now, score: r.score }].slice(-30);
+              historyRef.current.set(r.id, next);
+              window.__scoreHistory.set(r.id, next);
+            }
+          });
+        };
+
+        const updateTicker = (rows) => {
+          const items = [];
+          rows.forEach((r) => {
+            const prevScore = prevScoresRef.current.get(r.id) ?? 0;
+            if (r.score > prevScore) {
+              const delta = r.score - prevScore;
+              items.push({
+                id: `${r.id}-${Date.now()}`,
+                text: `${r.name} +${delta} pts`,
+                when: new Date(),
+              });
+            }
+            prevScoresRef.current.set(r.id, r.score);
+          });
+          if (items.length) setTicker((old) => [...items, ...old].slice(0, 30));
+        };
+
+        const materialize = (rows) => {
+          // Re-rank by score desc to reflect fresh ordering
+          const ordered = [...rows]
+            .sort((a, b) => b.score - a.score)
+            .map((r, i) => ({ ...r, rank: i + 1 }));
+          // Merge previous rank for movement indicator
+          const withMovement = ordered.map((r) => {
+            const prevRank = prevRanksRef.current.get(r.id) ?? r.rank;
+            prevRanksRef.current.set(r.id, r.rank);
+            return { ...r, prevRank, move: prevRank - r.rank }; // positive => moved up
+          });
+          return withMovement;
+        };
+
+        const fetchScoreboard = async () => {
+          try {
+            setError("");
+            const res = await fetch(endpoint, { cache: "no-store" });
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const json = await res.json();
+            let parsed = parsePayload(json);
+
+            // If scoreboard is empty, try falling back to the users list
+            if (!parsed.length) {
+              try {
+                const resUsers = await fetch(usersEndpoint, {
+                  cache: "no-store",
+                });
+                if (resUsers.ok) {
+                  const jsonUsers = await resUsers.json();
+                  const users = Array.isArray(jsonUsers)
+                    ? jsonUsers
+                    : jsonUsers?.data ?? [];
+                  if (Array.isArray(users) && users.length) {
+                    parsed = users.map((u, i) => ({
+                      id: String(u.id ?? u.account_id ?? u.name ?? `user-${i}`),
+                      name: String(
+                        u.name ?? u.display_name ?? `Player ${i + 1}`
+                      ),
+                      score: 0,
+                      pos: i + 1,
+                    }));
+                  }
+                }
+              } catch {}
+            }
+
+            if (!parsed.length) throw new Error("Empty scoreboard data");
+            pushHistory(parsed);
+            updateTicker(parsed);
+            const rows = materialize(parsed);
+            setTeams(rows);
+            setLastUpdated(new Date());
+            setLoading(false);
+          } catch (e) {
+            console.warn("Scoreboard fetch error:", e);
+            setError(String(e?.message || e));
+            setLoading(false);
+            // Fall back to demo data so the UI remains lively
+            const demo = buildDemoData();
+            pushHistory(demo);
+            updateTicker(demo);
+            setTeams(materialize(demo));
+            setLastUpdated(new Date());
+          }
+        };
+
+        // Optional WebSocket live updates (expects same shape as API response)
+        useEffect(() => {
+          if (!wsUrl) return;
+          let ws;
+          try {
+            ws = new WebSocket(wsUrl);
+            ws.onmessage = (ev) => {
+              try {
+                const data = JSON.parse(ev.data);
+                const parsed = parsePayload(data);
+                if (parsed.length) {
+                  pushHistory(parsed);
+                  updateTicker(parsed);
+                  setTeams(materialize(parsed));
+                  setLastUpdated(new Date());
+                }
+              } catch {
+                /* ignore */
+              }
+            };
+          } catch {}
+          return () => {
+            try {
+              ws?.close();
+            } catch {}
+          };
+        }, [wsUrl]);
+
+        // Polling
+        useEffect(() => {
+          fetchScoreboard();
+          if (wsUrl) return; // if WS is used, no polling
+          const id = setInterval(fetchScoreboard, Math.max(1500, interval));
+          return () => clearInterval(id);
+        }, [endpoint, interval, wsUrl]);
+
+        const top = useMemo(() => teams.slice(0, limit), [teams, limit]);
+
+        return React.createElement(
+          "div",
+          {
+            className: classNames(
+              "w-screen min-h-screen overflow-x-hidden overflow-y-auto relative",
+              overlay ? "bg-transparent" : "bg-slate-950"
+            ),
+          },
+          [
+            // Enhanced Glow backdrop with particles
+            !overlay &&
+              React.createElement(
+                "div",
+                {
+                  "aria-hidden": true,
+                  className: "pointer-events-none absolute inset-0 -z-10",
+                },
+                [
+                  // Animated gradient orbs
+                  React.createElement("div", {
+                    key: "orb1",
+                    className:
+                      "absolute -top-1/3 -left-1/4 w-[60vw] h-[60vw] rounded-full blur-3xl opacity-40 bg-fuchsia-600 animate-pulse",
+                  }),
+                  React.createElement("div", {
+                    key: "orb2",
+                    className:
+                      "absolute -bottom-1/3 -right-1/4 w-[60vw] h-[60vw] rounded-full blur-3xl opacity-40 bg-cyan-500 animate-pulse",
+                    style: { animationDelay: "1s" },
+                  }),
+                  React.createElement("div", {
+                    key: "orb3",
+                    className:
+                      "absolute top-1/4 right-1/4 w-[40vw] h-[40vw] rounded-full blur-3xl opacity-20 bg-amber-500 animate-pulse",
+                    style: { animationDelay: "2s" },
+                  }),
+
+                  // Grid pattern overlay
+                  React.createElement("div", {
+                    key: "grid",
+                    className:
+                      "absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]",
+                  }),
+
+                  // Radial gradient overlay
+                  React.createElement("div", {
+                    key: "radial",
+                    className:
+                      "absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_40%,rgba(255,255,255,0.08),rgba(0,0,0,0))]",
+                  }),
+
+                  // Enhanced floating particles
+                  React.createElement(
+                    "div",
+                    {
+                      key: "particles",
+                      className: "absolute inset-0 overflow-hidden",
+                    },
+                    [
+                      // Large glowing particles
+                      ...Array(5)
+                        .fill(0)
+                        .map((_, i) =>
+                          React.createElement("div", {
+                            key: `large-${i}`,
+                            className:
+                              "absolute w-3 h-3 bg-gradient-to-r from-cyan-400/40 to-fuchsia-400/40 rounded-full animate-float",
+                            style: {
+                              left: `${Math.random() * 100}%`,
+                              top: `${Math.random() * 100}%`,
+                              animationDelay: `${Math.random() * 5}s`,
+                              animationDuration: `${4 + Math.random() * 3}s`,
+                            },
+                          })
+                        ),
+                      // Small twinkling particles
+                      ...Array(15)
+                        .fill(0)
+                        .map((_, i) =>
+                          React.createElement("div", {
+                            key: `small-${i}`,
+                            className:
+                              "absolute w-1 h-1 bg-amber-300/60 rounded-full animate-ping",
+                            style: {
+                              left: `${Math.random() * 100}%`,
+                              top: `${Math.random() * 100}%`,
+                              animationDelay: `${Math.random() * 8}s`,
+                              animationDuration: `${2 + Math.random() * 4}s`,
+                            },
+                          })
+                        ),
+                      // Medium floating particles
+                      ...Array(8)
+                        .fill(0)
+                        .map((_, i) =>
+                          React.createElement("div", {
+                            key: `medium-${i}`,
+                            className:
+                              "absolute w-2 h-2 bg-gradient-to-r from-blue-400/30 to-purple-400/30 rounded-full animate-float",
+                            style: {
+                              left: `${Math.random() * 100}%`,
+                              top: `${Math.random() * 100}%`,
+                              animationDelay: `${Math.random() * 6}s`,
+                              animationDuration: `${3 + Math.random() * 4}s`,
+                            },
+                          })
+                        ),
+                    ]
+                  ),
+                ]
+              ),
+
+            !overlay &&
+              React.createElement(Header, { lastUpdated, loading, error }),
+
+            React.createElement(
+              "main",
+              {
+                className: classNames(
+                  "mx-auto max-w-6xl px-4",
+                  overlay ? "pt-2" : "pt-6"
+                ),
+              },
+              React.createElement(
+                LayoutGroup,
+                {},
+                React.createElement(
+                  "div",
+                  {
+                    className: "grid grid-cols-1 lg:grid-cols-3 gap-6",
+                  },
+                  [
+                    React.createElement(
+                      "div",
+                      {
+                        key: "leaderboard",
+                        className: "lg:col-span-2",
+                      },
+                      React.createElement(Leaderboard, { rows: top })
+                    ),
+                    React.createElement(
+                      "div",
+                      {
+                        key: "sidebar",
+                        className: "lg:col-span-1 flex flex-col gap-6",
+                      },
+                      [
+                        React.createElement(Ticker, {
+                          key: "ticker",
+                          items: ticker,
+                        }),
+                        React.createElement(UndershelfMetrics, {
+                          key: "metrics",
+                          rows: teams,
+                        }),
+                      ]
+                    ),
+                  ]
+                )
+              )
+            ),
+
+            // OBS overlay hint
+            !overlay &&
+              React.createElement(
+                "footer",
+                {
+                  className: "mt-6 text-center text-xs text-slate-400/70",
+                },
+                `Tip: Add ?overlay=1 for transparent OBS overlay. Configure ?limit=8&interval=3000.`
+              ),
+          ]
+        );
+      }
+
+      function Header({ lastUpdated, loading, error }) {
+        return React.createElement(
+          motion.div,
+          {
+            initial: { y: -50, opacity: 0 },
+            animate: { y: 0, opacity: 1 },
+            transition: { duration: 0.8, ease: "easeOut" },
+            className:
+              "sticky top-0 z-20 border-b border-cyan-500/30 backdrop-blur-xl bg-black/90 relative overflow-hidden",
+          },
+          [
+            // Cyber Grid Background
+            React.createElement("div", {
+              key: "cyber-bg",
+              className:
+                "absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-fuchsia-500/5",
+            }),
+
+            // Animated Border
+            React.createElement("div", {
+              key: "animated-border",
+              className:
+                "absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-pulse",
+            }),
+
+            React.createElement(
+              "div",
+              {
+                key: "header-content",
+                className:
+                  "mx-auto max-w-7xl px-6 py-8 flex items-center gap-8 relative z-10",
+              },
+              [
+                // Epic Live Badge with Hacker Theme
+                React.createElement(
+                  "div",
+                  {
+                    key: "live-badge",
+                    className: "relative inline-flex items-center group",
+                  },
+                  [
+                    React.createElement("div", {
+                      key: "cyber-glow",
+                      className:
+                        "absolute -inset-2 blur-2xl opacity-70 bg-gradient-to-r from-emerald-400 via-cyan-400 to-fuchsia-400 rounded-full group-hover:opacity-90 transition-opacity duration-500",
+                    }),
+                    React.createElement(
+                      motion.div,
+                      {
+                        key: "badge",
+                        className:
+                          "relative flex items-center gap-3 rounded-2xl px-6 py-3 bg-black/80 ring-2 ring-cyan-400/50 group-hover:ring-cyan-400 transition-all duration-500 cyber-border",
+                        animate: {
+                          scale: [1, 1.02, 1],
+                          boxShadow: [
+                            "0 0 0px rgba(0, 255, 255, 0)",
+                            "0 0 30px rgba(0, 255, 255, 0.6)",
+                            "0 0 0px rgba(0, 255, 255, 0)",
+                          ],
+                        },
+                        transition: {
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        },
+                      },
+                      [
+                        React.createElement(
+                          motion.div,
+                          {
+                            key: "pulse-dot",
+                            className: "relative",
+                            animate: {
+                              scale: [1, 1.3, 1],
+                              rotate: [0, 180, 360],
+                            },
+                            transition: {
+                              duration: 1.5,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                            },
+                          },
+                          [
+                            React.createElement("div", {
+                              key: "outer-ring",
+                              className:
+                                "absolute inset-0 w-3 h-3 border-2 border-emerald-400 rounded-full animate-ping",
+                            }),
+                            React.createElement("div", {
+                              key: "inner-dot",
+                              className:
+                                "w-3 h-3 bg-emerald-400 rounded-full relative z-10",
+                            }),
+                          ]
+                        ),
+                        React.createElement(
+                          "span",
+                          {
+                            key: "live-text",
+                            className: "text-sm tracking-widest font-bold",
+                            style: {
+                              color: "#00ff00",
+                              textShadow:
+                                "0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00",
+                            },
+                          },
+                          "LIVE"
+                        ),
+                        React.createElement(
+                          "span",
+                          {
+                            key: "activity-indicator",
+                            className: "text-emerald-400 font-bold text-lg",
+                          },
+                          "⚡"
+                        ),
+                      ]
+                    ),
+                  ]
+                ),
+
+                // Epic Title dengan Hacker Theme
+                React.createElement(
+                  "div",
+                  {
+                    key: "title-section",
+                    className: "flex items-center gap-4",
+                  },
+                  [
+                    React.createElement(
+                      motion.div,
+                      {
+                        key: "hacker-icon",
+                        className: "relative",
+                        animate: {
+                          rotate: [0, 5, -5, 0],
+                          scale: [1, 1.1, 1],
+                        },
+                        transition: {
+                          duration: 3,
+                          repeat: Infinity,
+                          repeatDelay: 2,
+                        },
+                      },
+                      [
+                        React.createElement("div", {
+                          key: "icon-bg",
+                          className:
+                            "absolute inset-0 bg-gradient-to-r from-amber-400 to-fuchsia-400 rounded-full blur-lg opacity-60",
+                        }),
+                        React.createElement(TrophyIcon, {
+                          key: "trophy-icon",
+                          className:
+                            "h-10 w-10 text-amber-400 drop-shadow-2xl relative z-10",
+                        }),
+                      ]
+                    ),
+                    React.createElement(
+                      motion.div,
+                      {
+                        key: "title-container",
+                        className: "flex flex-col",
+                      },
+                      [
+                        React.createElement(
+                          motion.span,
+                          {
+                            key: "main-title",
+                            className: "text-4xl font-black tracking-tight",
+                            style: {
+                              background:
+                                "linear-gradient(45deg, #00ffff, #ff00ff, #00ff00, #ffff00)",
+                              backgroundSize: "400% 400%",
+                              WebkitBackgroundClip: "text",
+                              WebkitTextFillColor: "transparent",
+                              backgroundClip: "text",
+                              textShadow: "0 0 30px rgba(0, 255, 255, 0.5)",
+                            },
+                            animate: {
+                              backgroundPosition: ["0%", "100%", "0%"],
+                            },
+                            transition: {
+                              duration: 4,
+                              repeat: Infinity,
+                              ease: "linear",
+                            },
+                          },
+                          "LappungCTF"
+                        ),
+                        React.createElement(
+                          "span",
+                          {
+                            key: "subtitle",
+                            className:
+                              "text-lg font-semibold text-cyan-300 tracking-widest",
+                            style: {
+                              textShadow: "0 0 10px rgba(0, 255, 255, 0.3)",
+                            },
+                          },
+                          "SCOREBOARD"
+                        ),
+                      ]
+                    ),
+                  ]
+                ),
+
+                // Epic Stats dengan Cyber Theme
+                React.createElement(
+                  "div",
+                  {
+                    key: "stats",
+                    className: "ml-auto flex items-center gap-4",
+                  },
+                  [
+                    React.createElement(
+                      motion.div,
+                      {
+                        key: "timer-card",
+                        className:
+                          "cyber-border bg-black/60 px-4 py-3 rounded-xl",
+                        whileHover: {
+                          scale: 1.05,
+                          boxShadow: "0 0 30px rgba(0, 255, 255, 0.4)",
+                        },
+                        animate: {
+                          boxShadow: [
+                            "0 0 10px rgba(0, 255, 255, 0.2)",
+                            "0 0 20px rgba(0, 255, 255, 0.4)",
+                            "0 0 10px rgba(0, 255, 255, 0.2)",
+                          ],
+                        },
+                        transition: {
+                          duration: 2,
+                          repeat: Infinity,
+                        },
+                      },
+                      [
+                        React.createElement(
+                          "div",
+                          {
+                            key: "timer-header",
+                            className: "flex items-center gap-2 mb-1",
+                          },
+                          [
+                            React.createElement(TimerIcon, {
+                              key: "timer-icon",
+                              className: "h-4 w-4 text-cyan-400",
+                            }),
+                            React.createElement(
+                              "span",
+                              {
+                                key: "timer-label",
+                                className:
+                                  "text-xs font-semibold text-cyan-300 uppercase tracking-wider",
+                              },
+                              "SYNC"
+                            ),
+                          ]
+                        ),
+                        React.createElement(
+                          "span",
+                          {
+                            key: "timer-value",
+                            className: "text-sm font-bold text-white",
+                          },
+                          lastUpdated
+                            ? `${formatAgo(lastUpdated)}`
+                            : loading
+                            ? "INIT..."
+                            : "OFFLINE"
+                        ),
+                      ]
+                    ),
+                    React.createElement(
+                      motion.div,
+                      {
+                        key: "activity-card",
+                        className:
+                          "cyber-border bg-black/60 px-4 py-3 rounded-xl",
+                        whileHover: {
+                          scale: 1.05,
+                          boxShadow: "0 0 30px rgba(255, 0, 255, 0.4)",
+                        },
+                        animate: {
+                          boxShadow: [
+                            "0 0 10px rgba(255, 0, 255, 0.2)",
+                            "0 0 20px rgba(255, 0, 255, 0.4)",
+                            "0 0 10px rgba(255, 0, 255, 0.2)",
+                          ],
+                        },
+                        transition: {
+                          duration: 2,
+                          repeat: Infinity,
+                          delay: 1,
+                        },
+                      },
+                      [
+                        React.createElement(
+                          "div",
+                          {
+                            key: "activity-header",
+                            className: "flex items-center gap-2 mb-1",
+                          },
+                          [
+                            React.createElement(ActivityIcon, {
+                              key: "activity-icon",
+                              className: "h-4 w-4 text-fuchsia-400",
+                            }),
+                            React.createElement(
+                              "span",
+                              {
+                                key: "activity-label",
+                                className:
+                                  "text-xs font-semibold text-fuchsia-300 uppercase tracking-wider",
+                              },
+                              "PING"
+                            ),
+                          ]
+                        ),
+                        React.createElement(
+                          "span",
+                          {
+                            key: "activity-value",
+                            className: "text-sm font-bold text-white",
+                          },
+                          `${Math.round(
+                            (Number(
+                              new URLSearchParams(window.location.search).get(
+                                "interval"
+                              )
+                            ) || 5000) / 1000
+                          )}s`
+                        ),
+                      ]
+                    ),
+                  ]
+                ),
+              ]
+            ),
+            error &&
+              React.createElement(
+                motion.div,
+                {
+                  key: "error",
+                  initial: { opacity: 0, y: -10 },
+                  animate: { opacity: 1, y: 0 },
+                  className: "mx-auto max-w-7xl px-6 pb-4 -mt-2 relative z-10",
+                },
+                React.createElement(
+                  "div",
+                  {
+                    className:
+                      "text-sm text-red-300 bg-red-900/30 px-4 py-3 rounded-xl border-2 border-red-500/50 cyber-glow",
+                    style: {
+                      textShadow: "0 0 10px rgba(255, 0, 0, 0.5)",
+                    },
+                  },
+                  `⚠️ SYSTEM ERROR: ${error}`
+                )
+              ),
+          ]
+        );
+      }
+
+      function Leaderboard({ rows }) {
+        return React.createElement(
+          motion.div,
+          {
+            initial: { opacity: 0, y: 30, scale: 0.95 },
+            animate: { opacity: 1, y: 0, scale: 1 },
+            transition: { duration: 1, delay: 0.3, ease: "easeOut" },
+            className: "relative",
+          },
+          [
+            // Cyber Grid Background
+            React.createElement("div", {
+              key: "cyber-bg",
+              className:
+                "absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-fuchsia-500/10 rounded-3xl",
+            }),
+
+            // Animated Border
+            React.createElement("div", {
+              key: "animated-border",
+              className:
+                "absolute inset-0 rounded-3xl border-2 border-transparent bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-amber-400 bg-clip-border",
+              style: {
+                background:
+                  "linear-gradient(45deg, #00ffff, #ff00ff, #00ff00, #ffff00)",
+                padding: "2px",
+                borderRadius: "24px",
+              },
+            }),
+
+            React.createElement(
+              "div",
+              {
+                className:
+                  "relative bg-black/80 backdrop-blur-xl rounded-2xl p-4 border border-cyan-500/30",
+                style: {
+                  boxShadow:
+                    "0 0 30px rgba(0, 255, 255, 0.2), inset 0 0 30px rgba(0, 255, 255, 0.05)",
+                },
+              },
+              [
+                // Epic Header
+                React.createElement(
+                  "div",
+                  {
+                    key: "header",
+                    className: "flex items-center justify-between mb-4",
+                  },
+                  [
+                    React.createElement(
+                      motion.div,
+                      {
+                        key: "title-section",
+                        className: "flex items-center gap-4",
+                        initial: { opacity: 0, x: -30 },
+                        animate: { opacity: 1, x: 0 },
+                        transition: { delay: 0.5, duration: 0.8 },
+                      },
+                      [
+                        React.createElement(
+                          motion.div,
+                          {
+                            key: "icon-container",
+                            className: "relative",
+                            animate: {
+                              rotate: [0, 10, -10, 0],
+                              scale: [1, 1.1, 1],
+                            },
+                            transition: {
+                              duration: 3,
+                              repeat: Infinity,
+                              repeatDelay: 2,
+                            },
+                          },
+                          [
+                            React.createElement("div", {
+                              key: "icon-glow",
+                              className:
+                                "absolute inset-0 bg-gradient-to-r from-cyan-400 to-fuchsia-400 rounded-full blur-lg opacity-60",
+                            }),
+                            React.createElement(SignalIcon, {
+                              key: "signal-icon",
+                              className: "h-8 w-8 text-cyan-400 relative z-10",
+                            }),
+                          ]
+                        ),
+                        React.createElement(
+                          "div",
+                          {
+                            key: "title-text",
+                            className: "flex flex-col",
+                          },
+                          [
+                            React.createElement(
+                              motion.h2,
+                              {
+                                key: "main-title",
+                                className: "text-xl font-black tracking-wider",
+                                style: {
+                                  background:
+                                    "linear-gradient(45deg, #00ffff, #ff00ff, #00ff00)",
+                                  backgroundSize: "200% 200%",
+                                  WebkitBackgroundClip: "text",
+                                  WebkitTextFillColor: "transparent",
+                                  backgroundClip: "text",
+                                  textShadow: "0 0 20px rgba(0, 255, 255, 0.3)",
+                                },
+                                animate: {
+                                  backgroundPosition: ["0%", "100%", "0%"],
+                                },
+                                transition: {
+                                  duration: 3,
+                                  repeat: Infinity,
+                                  ease: "linear",
+                                },
+                              },
+                              "LEADERBOARD"
+                            ),
+                            React.createElement(
+                              "span",
+                              {
+                                key: "subtitle",
+                                className:
+                                  "text-xs text-cyan-300 font-semibold tracking-widest",
+                                style: {
+                                  textShadow: "0 0 10px rgba(0, 255, 255, 0.2)",
+                                },
+                              },
+                              "CYBER RANKINGS"
+                            ),
+                          ]
+                        ),
+                      ]
+                    ),
+                    React.createElement(
+                      motion.div,
+                      {
+                        key: "status-badge",
+                        className:
+                          "flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-400/30",
+                        initial: { opacity: 0, x: 30 },
+                        animate: { opacity: 1, x: 0 },
+                        transition: { delay: 0.7, duration: 0.8 },
+                        animate: {
+                          boxShadow: [
+                            "0 0 10px rgba(0, 255, 255, 0.2)",
+                            "0 0 20px rgba(0, 255, 255, 0.4)",
+                            "0 0 10px rgba(0, 255, 255, 0.2)",
+                          ],
+                        },
+                        transition: {
+                          duration: 2,
+                          repeat: Infinity,
+                        },
+                      },
+                      [
+                        React.createElement("div", {
+                          key: "status-dot",
+                          className:
+                            "w-2 h-2 bg-emerald-400 rounded-full animate-pulse",
+                        }),
+                        React.createElement(
+                          "span",
+                          {
+                            key: "status-text",
+                            className:
+                              "text-sm font-bold text-emerald-300 uppercase tracking-wider",
+                          },
+                          "ACTIVE"
+                        ),
+                      ]
+                    ),
+                  ]
+                ),
+
+                // Epic Leaderboard List
+                React.createElement(
+                  "div",
+                  {
+                    key: "leaderboard-container",
+                    className: "space-y-2",
+                  },
+                  React.createElement(
+                    AnimatePresence,
+                    { initial: false },
+                    rows.map((r, index) =>
+                      React.createElement(
+                        motion.div,
+                        {
+                          key: r.id,
+                          layout: true,
+                          initial: {
+                            opacity: 0,
+                            y: 30,
+                            scale: 0.9,
+                            rotateX: 90,
+                          },
+                          animate: {
+                            opacity: 1,
+                            y: 0,
+                            scale: 1,
+                            rotateX: 0,
+                          },
+                          exit: {
+                            opacity: 0,
+                            y: -30,
+                            scale: 0.9,
+                            rotateX: -90,
+                          },
+                          transition: {
+                            type: "spring",
+                            stiffness: 300,
+                            damping: 25,
+                            delay: index * 0.15,
+                          },
+                          whileHover: {
+                            scale: 1.03,
+                            y: -5,
+                            transition: { duration: 0.3 },
+                          },
+                        },
+                        React.createElement(Row, {
+                          r,
+                          max: rows[0]?.score ?? 1,
+                        })
+                      )
+                    )
+                  )
+                ),
+              ]
+            ),
+          ]
+        );
+      }
+
+      function Row({ r, max }) {
+        const moveIcon =
+          r.move > 0
+            ? React.createElement(ArrowUpRightIcon, {
+                className: "h-4 w-4 text-emerald-400",
+              })
+            : r.move < 0
+            ? React.createElement(ArrowDownRightIcon, {
+                className: "h-4 w-4 text-rose-400",
+              })
+            : React.createElement(MinusIcon, {
+                className: "h-4 w-4 text-slate-400",
+              });
+        const pct = Math.max(
+          0,
+          Math.min(100, (r.score / Math.max(1, max)) * 100)
+        );
+
+        // Generate team avatar
+        const avatar = generateTeamAvatar(r.name, r.rank);
+
+        const crown =
+          r.rank === 1
+            ? React.createElement(CrownIcon, {
+                className: "h-6 w-6 text-amber-300 drop-shadow-lg",
+              })
+            : r.rank <= 3
+            ? React.createElement(FlameIcon, {
+                className: "h-5 w-5 text-fuchsia-300 drop-shadow",
+              })
+            : r.rank <= 5
+            ? React.createElement(StarIcon, {
+                className: "h-5 w-5 text-cyan-300",
+              })
+            : null;
+
+        return React.createElement(
+          motion.div,
+          {
+            className: classNames(
+              "relative overflow-hidden rounded-2xl bg-black/60 backdrop-blur-xl border border-cyan-500/20 group transition-all duration-500",
+              r.rank <= 3 ? "cyber-glow" : "",
+              r.move !== 0 ? "ring-2 ring-cyan-400/50" : ""
+            ),
+            whileHover: {
+              scale: 1.02,
+              y: -3,
+              boxShadow:
+                "0 20px 60px rgba(0, 255, 255, 0.3), 0 0 30px rgba(0, 255, 255, 0.2)",
+              borderColor: "rgba(0, 255, 255, 0.5)",
+            },
+            initial: { opacity: 0, y: 20, rotateX: 15 },
+            animate: { opacity: 1, y: 0, rotateX: 0 },
+            transition: { duration: 0.6, ease: "easeOut" },
+          },
+          [
+            // Cyber Grid Background
+            React.createElement("div", {
+              key: "cyber-bg",
+              className:
+                "absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-fuchsia-500/5 opacity-50",
+            }),
+
+            // Animated Left Border
+            React.createElement("div", {
+              key: "left-border",
+              className: classNames(
+                "absolute inset-y-0 left-0 w-1 transition-all duration-500",
+                r.rank === 1
+                  ? "bg-gradient-to-b from-amber-400 to-yellow-500 shadow-lg shadow-amber-500/50"
+                  : r.rank <= 3
+                  ? "bg-gradient-to-b from-fuchsia-400 to-pink-500 shadow-lg shadow-fuchsia-500/50"
+                  : r.rank <= 5
+                  ? "bg-gradient-to-b from-cyan-400 to-blue-500 shadow-lg shadow-cyan-500/50"
+                  : "bg-gradient-to-b from-slate-400 to-slate-600"
+              ),
+            }),
+
+            // Glow effect for top 3
+            r.rank <= 3 &&
+              React.createElement("div", {
+                key: "top-glow",
+                className:
+                  "absolute inset-0 rounded-2xl bg-gradient-to-r from-amber-500/10 via-fuchsia-500/10 to-cyan-500/10 opacity-60",
+              }),
+
+            // Score change particles effect
+            r.move !== 0 &&
+              React.createElement(
+                "div",
+                {
+                  key: "score-particles",
+                  className:
+                    "absolute inset-0 pointer-events-none overflow-hidden",
+                },
+                [
+                  // Upward particles for score increase
+                  ...(r.move > 0
+                    ? Array(8)
+                        .fill(0)
+                        .map((_, i) =>
+                          React.createElement(motion.div, {
+                            key: `up-particle-${i}`,
+                            className:
+                              "absolute w-1 h-1 bg-emerald-400 rounded-full",
+                            initial: {
+                              x: "50%",
+                              y: "100%",
+                              opacity: 1,
+                              scale: 0,
+                            },
+                            animate: {
+                              x: `${50 + (Math.random() - 0.5) * 100}%`,
+                              y: "-20%",
+                              opacity: 0,
+                              scale: [0, 1, 0],
+                            },
+                            transition: {
+                              duration: 1.2,
+                              delay: i * 0.1,
+                              ease: "easeOut",
+                            },
+                          })
+                        )
+                    : []),
+                  // Downward particles for score decrease
+                  ...(r.move < 0
+                    ? Array(8)
+                        .fill(0)
+                        .map((_, i) =>
+                          React.createElement(motion.div, {
+                            key: `down-particle-${i}`,
+                            className:
+                              "absolute w-1 h-1 bg-rose-400 rounded-full",
+                            initial: {
+                              x: "50%",
+                              y: "0%",
+                              opacity: 1,
+                              scale: 0,
+                            },
+                            animate: {
+                              x: `${50 + (Math.random() - 0.5) * 100}%`,
+                              y: "120%",
+                              opacity: 0,
+                              scale: [0, 1, 0],
+                            },
+                            transition: {
+                              duration: 1.2,
+                              delay: i * 0.1,
+                              ease: "easeOut",
+                            },
+                          })
+                        )
+                    : []),
+                ]
+              ),
+
+            React.createElement(
+              "div",
+              {
+                key: "content",
+                className: "p-4 relative z-10",
+              },
+              [
+                React.createElement(
+                  "div",
+                  {
+                    key: "main-row",
+                    className: "flex items-center gap-4",
+                  },
+                  [
+                    // Epic Rank Badge
+                    React.createElement(
+                      motion.div,
+                      {
+                        key: "rank",
+                        className: classNames(
+                          "flex items-center justify-center h-10 w-10 shrink-0 rounded-xl font-black text-lg transition-all duration-500 relative",
+                          r.rank === 1
+                            ? "bg-gradient-to-br from-amber-400 to-yellow-500 text-amber-900 shadow-2xl shadow-amber-500/50"
+                            : r.rank <= 3
+                            ? "bg-gradient-to-br from-fuchsia-400 to-pink-500 text-fuchsia-900 shadow-2xl shadow-fuchsia-500/50"
+                            : r.rank <= 5
+                            ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-cyan-900 shadow-2xl shadow-cyan-500/50"
+                            : "bg-gradient-to-br from-slate-700 to-slate-800 text-slate-200 border border-slate-600"
+                        ),
+                        animate:
+                          r.rank === 1
+                            ? {
+                                scale: [1, 1.1, 1],
+                                rotate: [0, 5, -5, 0],
+                              }
+                            : {},
+                        transition: {
+                          duration: 2,
+                          repeat: Infinity,
+                          repeatDelay: 3,
+                        },
+                      },
+                      [
+                        r.rank,
+                        // Rank glow effect
+                        React.createElement("div", {
+                          key: "rank-glow",
+                          className:
+                            "absolute inset-0 rounded-2xl blur-lg opacity-60",
+                          style: {
+                            background:
+                              r.rank === 1
+                                ? "linear-gradient(45deg, #fbbf24, #f59e0b)"
+                                : r.rank <= 3
+                                ? "linear-gradient(45deg, #ec4899, #be185d)"
+                                : r.rank <= 5
+                                ? "linear-gradient(45deg, #06b6d4, #0284c7)"
+                                : "linear-gradient(45deg, #64748b, #475569)",
+                          },
+                        }),
+                      ]
+                    ),
+
+                    // Team Info Section
+                    React.createElement(
+                      "div",
+                      {
+                        key: "team-info",
+                        className: "flex-1 min-w-0",
+                      },
+                      [
+                        React.createElement(
+                          "div",
+                          {
+                            key: "name-section",
+                            className: "flex items-center gap-3 mb-3",
+                          },
+                          [
+                            // Epic Team Avatar
+                            React.createElement(
+                              motion.div,
+                              {
+                                key: "avatar",
+                                className: `w-10 h-10 rounded-xl bg-gradient-to-br ${avatar.gradient} flex items-center justify-center text-white font-bold text-sm shadow-2xl relative overflow-hidden border-2 border-white/20`,
+                                animate:
+                                  r.move !== 0
+                                    ? {
+                                        scale: [1, 1.15, 1],
+                                        rotate: [0, 10, 0],
+                                      }
+                                    : {},
+                                transition: { duration: 0.6 },
+                              },
+                              [
+                                React.createElement(
+                                  "span",
+                                  {
+                                    key: "initials",
+                                    className:
+                                      "relative z-10 text-sm font-black",
+                                  },
+                                  avatar.initials
+                                ),
+                                // Avatar glow effect
+                                React.createElement("div", {
+                                  key: "avatar-glow",
+                                  className:
+                                    "absolute inset-0 bg-white/30 rounded-2xl blur-sm",
+                                }),
+                              ]
+                            ),
+                            crown,
+                            React.createElement(
+                              "span",
+                              {
+                                key: "name-text",
+                                className:
+                                  "text-lg font-black text-white truncate",
+                                style: {
+                                  textShadow:
+                                    "0 0 10px rgba(255, 255, 255, 0.3)",
+                                },
+                              },
+                              r.name
+                            ),
+                          ]
+                        ),
+
+                        // Epic Progress Bar
+                        React.createElement(
+                          "div",
+                          {
+                            key: "progress-container",
+                            className: "relative",
+                          },
+                          [
+                            React.createElement("div", {
+                              key: "progress-bg",
+                              className:
+                                "h-3 w-full bg-slate-800/60 rounded-full overflow-hidden border border-slate-700/50 relative",
+                            }),
+                            React.createElement(
+                              motion.div,
+                              {
+                                key: "progress-bar",
+                                className:
+                                  "h-full rounded-full bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-amber-300 shadow-lg relative overflow-hidden",
+                                initial: { width: 0 },
+                                animate: {
+                                  width: `${pct}%`,
+                                  scale: r.move !== 0 ? [1, 1.05, 1] : 1,
+                                },
+                                transition: {
+                                  width: { duration: 2, ease: "easeOut" },
+                                  scale: { duration: 0.8, delay: 0.5 },
+                                },
+                                style: {
+                                  boxShadow: `0 0 20px ${
+                                    pct > 50
+                                      ? "rgba(6, 182, 212, 0.6)"
+                                      : "rgba(236, 72, 153, 0.6)"
+                                  }`,
+                                },
+                              },
+                              [
+                                // Shimmer effect
+                                React.createElement("div", {
+                                  key: "shimmer",
+                                  className:
+                                    "absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer",
+                                  style: {
+                                    animationDelay: "2s",
+                                    animationDuration: "3s",
+                                  },
+                                }),
+                              ]
+                            ),
+                            // Progress percentage
+                            React.createElement(
+                              "div",
+                              {
+                                key: "progress-text",
+                                className:
+                                  "absolute right-2 top-1/2 transform -translate-y-1/2 text-xs font-bold text-white",
+                                style: {
+                                  textShadow: "0 0 5px rgba(0, 0, 0, 0.8)",
+                                },
+                              },
+                              `${Math.round(pct)}%`
+                            ),
+                          ]
+                        ),
+                      ]
+                    ),
+
+                    // Score Section
+                    React.createElement(
+                      "div",
+                      {
+                        key: "score-section",
+                        className: "text-right",
+                      },
+                      [
+                        React.createElement(
+                          motion.div,
+                          {
+                            key: "score",
+                            className: "text-xl font-black tabular-nums",
+                            style: {
+                              background:
+                                "linear-gradient(45deg, #00ffff, #ff00ff, #00ff00)",
+                              backgroundSize: "200% 200%",
+                              WebkitBackgroundClip: "text",
+                              WebkitTextFillColor: "transparent",
+                              backgroundClip: "text",
+                              textShadow: "0 0 20px rgba(0, 255, 255, 0.5)",
+                            },
+                            animate:
+                              r.move !== 0
+                                ? {
+                                    scale: [1, 1.3, 1],
+                                    y: [0, -8, 0],
+                                  }
+                                : {},
+                            transition: { duration: 0.8 },
+                          },
+                          formatScore(r.score)
+                        ),
+                        React.createElement(
+                          "div",
+                          {
+                            key: "movement",
+                            className:
+                              "flex items-center gap-2 justify-end mt-2",
+                          },
+                          [
+                            React.createElement(
+                              motion.div,
+                              {
+                                key: "move-icon",
+                                className: "relative",
+                                animate:
+                                  r.move !== 0
+                                    ? {
+                                        scale: [1, 1.4, 1],
+                                        rotate:
+                                          r.move > 0 ? [0, -20, 0] : [0, 20, 0],
+                                      }
+                                    : {},
+                                transition: {
+                                  duration: 0.8,
+                                  type: "spring",
+                                  stiffness: 300,
+                                  damping: 20,
+                                },
+                              },
+                              [
+                                moveIcon,
+                                r.move !== 0 &&
+                                  React.createElement("div", {
+                                    key: "move-glow",
+                                    className: `absolute inset-0 rounded-full blur-sm ${
+                                      r.move > 0
+                                        ? "bg-emerald-400/40"
+                                        : "bg-rose-400/40"
+                                    }`,
+                                  }),
+                              ]
+                            ),
+                            React.createElement(
+                              motion.span,
+                              {
+                                key: "move-text",
+                                className: `text-sm font-bold ${
+                                  r.move > 0
+                                    ? "text-emerald-400"
+                                    : r.move < 0
+                                    ? "text-rose-400"
+                                    : "text-slate-400"
+                                }`,
+                                animate:
+                                  r.move !== 0
+                                    ? {
+                                        scale: [1, 1.3, 1],
+                                      }
+                                    : {},
+                                transition: { duration: 0.8 },
+                              },
+                              Math.abs(r.move) ? Math.abs(r.move) : 0
+                            ),
+                          ]
+                        ),
+                      ]
+                    ),
+                  ]
+                ),
+
+                // Epic Sparkline Container
+                React.createElement(
+                  "div",
+                  {
+                    key: "sparkline",
+                    className:
+                      "mt-4 h-12 rounded-lg bg-black/40 border border-cyan-500/20 p-2",
+                    style: {
+                      boxShadow: "inset 0 0 20px rgba(0, 255, 255, 0.1)",
+                    },
+                  },
+                  React.createElement(Spark, { id: r.id })
+                ),
+              ]
+            ),
+          ]
+        );
+      }
+
+      function Spark({ id }) {
+        const [series, setSeries] = useState([]);
+        useEffect(() => {
+          const iv = setInterval(() => {
+            const hist = window.__scoreHistory?.get
+              ? window.__scoreHistory.get(id) ?? []
+              : [];
+            setSeries(hist.map((h, i) => ({ x: i, y: h.score })));
+          }, 600);
+          return () => clearInterval(iv);
+        }, [id]);
+        return React.createElement(
+          ResponsiveContainer,
+          {
+            width: "100%",
+            height: "100%",
+          },
+          React.createElement(
+            LineChart,
+            {
+              data: series,
+              margin: { top: 6, right: 8, bottom: 0, left: 0 },
+            },
+            [
+              React.createElement(Line, {
+                key: "line",
+                type: "monotone",
+                dataKey: "y",
+                dot: false,
+                strokeWidth: 3,
+                isAnimationActive: false,
+                stroke: "url(#gradient)",
+                strokeLinecap: "round",
+                strokeLinejoin: "round",
+              }),
+              React.createElement(
+                "defs",
+                {
+                  key: "defs",
+                },
+                React.createElement(
+                  "linearGradient",
+                  {
+                    key: "gradient",
+                    id: "gradient",
+                    x1: "0",
+                    y1: "0",
+                    x2: "1",
+                    y2: "0",
+                  },
+                  [
+                    React.createElement("stop", {
+                      key: "stop1",
+                      offset: "0%",
+                      stopColor: "#06b6d4",
+                    }),
+                    React.createElement("stop", {
+                      key: "stop2",
+                      offset: "50%",
+                      stopColor: "#ec4899",
+                    }),
+                    React.createElement("stop", {
+                      key: "stop3",
+                      offset: "100%",
+                      stopColor: "#f59e0b",
+                    }),
+                  ]
+                )
+              ),
+            ]
+          )
+        );
+      }
+
+      function Ticker({ items }) {
+        return React.createElement(
+          motion.div,
+          {
+            initial: { opacity: 0, x: 20 },
+            animate: { opacity: 1, x: 0 },
+            transition: { duration: 0.8, delay: 0.4 },
+            className:
+              "rounded-3xl ring-1 ring-white/15 bg-slate-900/60 backdrop-blur-xl p-1 relative overflow-hidden group",
+            whileHover: {
+              scale: 1.02,
+              boxShadow:
+                "0 25px 50px rgba(0,0,0,0.4), 0 0 30px rgba(6, 182, 212, 0.2)",
+            },
+          },
+          React.createElement(
+            "div",
+            {
+              className: classNames(
+                "rounded-3xl p-4",
+                neonGrad,
+                "bg-opacity-35"
+              ),
+            },
+            [
+              React.createElement(
+                "div",
+                {
+                  key: "header",
+                  className:
+                    "flex items-center gap-3 text-white/95 font-bold mb-4",
+                },
+                [
+                  // Animated background glow
+                  React.createElement("div", {
+                    key: "header-glow",
+                    className:
+                      "absolute inset-0 bg-gradient-to-r from-yellow-500/10 via-cyan-500/10 to-fuchsia-500/10 rounded-2xl blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-500",
+                  }),
+
+                  React.createElement(
+                    motion.div,
+                    {
+                      key: "zap-icon",
+                      className: "relative z-10",
+                      animate: {
+                        rotate: [0, 10, -10, 0],
+                        scale: [1, 1.1, 1],
+                      },
+                      transition: {
+                        duration: 2,
+                        repeat: Infinity,
+                        repeatDelay: 1,
+                      },
+                    },
+                    [
+                      React.createElement(ZapIcon, {
+                        key: "zap-icon-element",
+                        className: "h-6 w-6 text-yellow-400 drop-shadow-lg",
+                      }),
+                      React.createElement("div", {
+                        key: "zap-glow",
+                        className:
+                          "absolute inset-0 h-6 w-6 bg-yellow-400/20 rounded-full blur-sm -z-10",
+                      }),
+                    ]
+                  ),
+                  React.createElement(
+                    motion.span,
+                    {
+                      key: "title",
+                      className: "text-xl font-bold text-white relative z-10",
+                      animate: {
+                        backgroundPosition: ["0%", "100%", "0%"],
+                      },
+                      transition: {
+                        duration: 3,
+                        repeat: Infinity,
+                        ease: "linear",
+                      },
+                      style: {
+                        background:
+                          "linear-gradient(90deg, #ffffff, #60a5fa, #a78bfa, #fbbf24, #ffffff)",
+                        backgroundSize: "200% 100%",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+                      },
+                    },
+                    "Live Ticker"
+                  ),
+                ]
+              ),
+              React.createElement(
+                "div",
+                {
+                  key: "items-container",
+                  className: "h-48 overflow-hidden relative group/scroll",
+                  style: {
+                    maskImage:
+                      "linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%)",
+                    WebkitMaskImage:
+                      "linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%)",
+                  },
+                },
+                [
+                  // Animated background pattern
+                  React.createElement("div", {
+                    key: "bg-pattern",
+                    className: "absolute inset-0 opacity-5",
+                    style: {
+                      backgroundImage:
+                        "radial-gradient(circle at 25% 25%, #60a5fa 0%, transparent 50%), radial-gradient(circle at 75% 75%, #a78bfa 0%, transparent 50%)",
+                      animation: "pulse 4s ease-in-out infinite",
+                    },
+                  }),
+
+                  // Gradient fade at top and bottom
+                  React.createElement("div", {
+                    key: "fade-top",
+                    className:
+                      "absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-slate-900/60 to-transparent z-10 pointer-events-none",
+                  }),
+                  React.createElement("div", {
+                    key: "fade-bottom",
+                    className:
+                      "absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-slate-900/60 to-transparent z-10 pointer-events-none",
+                  }),
+
+                  React.createElement(
+                    AnimatePresence,
+                    { initial: false },
+                    items.slice(0, 10).map((t, index) =>
+                      React.createElement(
+                        motion.div,
+                        {
+                          key: t.id,
+                          initial: { opacity: 0, y: 30, x: 30, scale: 0.8 },
+                          animate: { opacity: 1, y: 0, x: 0, scale: 1 },
+                          exit: { opacity: 0, y: -30, x: -30, scale: 0.8 },
+                          transition: {
+                            duration: 0.6,
+                            delay: index * 0.1,
+                            type: "spring",
+                            stiffness: 400,
+                            damping: 25,
+                          },
+                          className:
+                            "text-sm text-slate-100 flex items-center gap-3 py-3 px-4 rounded-xl hover:bg-slate-800/40 transition-all duration-300 group relative overflow-hidden border border-transparent hover:border-white/10",
+                          whileHover: {
+                            scale: 1.03,
+                            x: 8,
+                            boxShadow:
+                              "0 10px 25px rgba(0,0,0,0.3), 0 0 15px rgba(16, 185, 129, 0.2)",
+                          },
+                        },
+                        [
+                          React.createElement(
+                            motion.span,
+                            {
+                              key: "dot",
+                              className:
+                                "inline-flex h-3 w-3 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400 shadow-lg shadow-emerald-400/50 relative flex-shrink-0",
+                              animate: {
+                                scale: [1, 1.3, 1],
+                                boxShadow: [
+                                  "0 0 0px rgba(16, 185, 129, 0.5)",
+                                  "0 0 15px rgba(16, 185, 129, 0.8)",
+                                  "0 0 0px rgba(16, 185, 129, 0.5)",
+                                ],
+                                rotate: [0, 180, 360],
+                              },
+                              transition: {
+                                duration: 1.5,
+                                repeat: Infinity,
+                                delay: index * 0.15,
+                                ease: "easeInOut",
+                              },
+                            },
+                            [
+                              React.createElement("div", {
+                                key: "dot-glow",
+                                className:
+                                  "absolute inset-0 h-3 w-3 bg-emerald-400/40 rounded-full blur-sm animate-pulse",
+                              }),
+                              React.createElement("div", {
+                                key: "dot-inner",
+                                className:
+                                  "absolute inset-1 h-1 w-1 bg-white/60 rounded-full",
+                              }),
+                            ]
+                          ),
+                          React.createElement(
+                            motion.span,
+                            {
+                              key: "text",
+                              className:
+                                "font-semibold flex-1 group-hover:text-white transition-colors duration-300",
+                              animate: {
+                                x: [0, 2, 0],
+                              },
+                              transition: {
+                                duration: 2,
+                                repeat: Infinity,
+                                delay: index * 0.1,
+                                ease: "easeInOut",
+                              },
+                            },
+                            t.text
+                          ),
+                          React.createElement(
+                            motion.span,
+                            {
+                              key: "time",
+                              className:
+                                "text-xs text-slate-400 font-medium bg-slate-800/50 px-2 py-1 rounded-full",
+                              animate: {
+                                opacity: [0.7, 1, 0.7],
+                              },
+                              transition: {
+                                duration: 2,
+                                repeat: Infinity,
+                                delay: index * 0.1 + 0.5,
+                                ease: "easeInOut",
+                              },
+                            },
+                            formatTime(t.when)
+                          ),
+                        ]
+                      )
+                    )
+                  ),
+                ]
+              ),
+            ]
+          )
+        );
+      }
+
+      function UndershelfMetrics({ rows }) {
+        const attemptsPerMin = Math.max(1, Math.round(Math.random() * 30 + 10)); // placeholder metric
+        const avgScore = rows.length
+          ? Math.round(rows.reduce((a, b) => a + b.score, 0) / rows.length)
+          : 0;
+
+        // Enhanced live statistics
+        const totalScore = rows.reduce((a, b) => a + b.score, 0);
+        const topScore = Math.max(...rows.map((r) => r.score), 0);
+        const activeTeams = rows.filter((r) => r.score > 0).length;
+        const scoreRange =
+          topScore > 0 ? topScore - Math.min(...rows.map((r) => r.score)) : 0;
+        const avgScorePerTeam =
+          activeTeams > 0 ? Math.round(totalScore / activeTeams) : 0;
+
+        // Performance metrics
+        const performanceData = [
+          {
+            label: "Submissions/min",
+            value: attemptsPerMin,
+            color: "cyan",
+            icon: "📊",
+          },
+          {
+            label: "Avg Score",
+            value: formatScore(avgScore),
+            color: "amber",
+            icon: "🏆",
+          },
+          {
+            label: "Teams",
+            value: `${rows.length}`,
+            color: "fuchsia",
+            icon: "👥",
+          },
+          {
+            label: "Top Score",
+            value: formatScore(topScore),
+            color: "emerald",
+            icon: "⭐",
+          },
+          {
+            label: "Score Range",
+            value: formatScore(scoreRange),
+            color: "blue",
+            icon: "📈",
+          },
+          {
+            label: "Active",
+            value: `${activeTeams}`,
+            color: "green",
+            icon: "🔥",
+          },
+        ];
+        return React.createElement(
+          motion.div,
+          {
+            initial: { opacity: 0, y: 20 },
+            animate: { opacity: 1, y: 0 },
+            transition: { duration: 0.8, delay: 0.6 },
+            className: "space-y-4",
+          },
+          [
+            // Main metrics row
+            React.createElement(
+              "div",
+              {
+                key: "main-metrics",
+                className: "grid grid-cols-3 gap-4",
+              },
+              performanceData.slice(0, 3).map((metric, index) =>
+                React.createElement(MetricCard, {
+                  key: metric.label.toLowerCase().replace(/\s+/g, "-"),
+                  icon: React.createElement(
+                    "span",
+                    {
+                      className: "text-2xl",
+                      style: { display: "block" },
+                    },
+                    metric.icon
+                  ),
+                  label: metric.label,
+                  value: metric.value,
+                  color: metric.color,
+                })
+              )
+            ),
+            // Additional metrics row
+            React.createElement(
+              "div",
+              {
+                key: "additional-metrics",
+                className: "grid grid-cols-3 gap-4",
+              },
+              performanceData.slice(3).map((metric, index) =>
+                React.createElement(MetricCard, {
+                  key: metric.label.toLowerCase().replace(/\s+/g, "-"),
+                  icon: React.createElement(
+                    "span",
+                    {
+                      className: "text-2xl",
+                      style: { display: "block" },
+                    },
+                    metric.icon
+                  ),
+                  label: metric.label,
+                  value: metric.value,
+                  color: metric.color,
+                })
+              )
+            ),
+          ]
+        );
+      }
+
+      function MetricCard({ icon, label, value, color = "cyan" }) {
+        const colorClasses = {
+          cyan: "text-cyan-400 shadow-cyan-500/20 bg-cyan-500/10",
+          amber: "text-amber-400 shadow-amber-500/20 bg-amber-500/10",
+          fuchsia: "text-fuchsia-400 shadow-fuchsia-500/20 bg-fuchsia-500/10",
+        };
+
+        return React.createElement(
+          motion.div,
+          {
+            className:
+              "rounded-2xl p-6 bg-slate-950/80 ring-1 ring-white/20 backdrop-blur-sm hover:ring-white/30 transition-all duration-300 group relative overflow-hidden",
+            whileHover: {
+              scale: 1.05,
+              y: -2,
+              boxShadow: `0 15px 40px ${
+                color === "cyan"
+                  ? "rgba(6, 182, 212, 0.3)"
+                  : color === "amber"
+                  ? "rgba(245, 158, 11, 0.3)"
+                  : "rgba(236, 72, 153, 0.3)"
+              }`,
+            },
+            initial: { opacity: 0, y: 20 },
+            animate: { opacity: 1, y: 0 },
+            transition: { duration: 0.5, ease: "easeOut" },
+          },
+          [
+            // Subtle background glow
+            React.createElement("div", {
+              key: "bg-glow",
+              className: `absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${
+                color === "cyan"
+                  ? "bg-gradient-to-br from-cyan-500/5 to-transparent"
+                  : color === "amber"
+                  ? "bg-gradient-to-br from-amber-500/5 to-transparent"
+                  : "bg-gradient-to-br from-fuchsia-500/5 to-transparent"
+              }`,
+            }),
+
+            React.createElement(
+              "div",
+              {
+                key: "header",
+                className: "flex items-center gap-3 mb-2 relative z-10",
+              },
+              [
+                React.createElement(
+                  motion.div,
+                  {
+                    key: "icon-container",
+                    className: classNames(
+                      "p-2 rounded-lg bg-slate-800/50 flex items-center justify-center",
+                      colorClasses[color]
+                    ),
+                    animate: { rotate: [0, 5, -5, 0] },
+                    transition: {
+                      duration: 2,
+                      repeat: Infinity,
+                      repeatDelay: 3,
+                    },
+                    style: { minWidth: "2rem", minHeight: "2rem" },
+                  },
+                  icon
+                ),
+                React.createElement(
+                  "div",
+                  {
+                    key: "label",
+                    className: `text-sm font-semibold ${
+                      color === "cyan"
+                        ? "text-cyan-200"
+                        : color === "amber"
+                        ? "text-amber-200"
+                        : "text-fuchsia-200"
+                    }`,
+                  },
+                  label
+                ),
+              ]
+            ),
+            React.createElement(
+              motion.div,
+              {
+                key: "value",
+                className: `text-2xl font-black tabular-nums bg-gradient-to-r ${
+                  color === "cyan"
+                    ? "from-cyan-400 to-cyan-200"
+                    : color === "amber"
+                    ? "from-amber-400 to-amber-200"
+                    : "from-fuchsia-400 to-fuchsia-200"
+                } bg-clip-text text-transparent drop-shadow-lg relative z-10`,
+                animate: {
+                  scale: [1, 1.05, 1],
+                  textShadow: [
+                    "0 0 0px rgba(255,255,255,0)",
+                    "0 0 10px rgba(255,255,255,0.3)",
+                    "0 0 0px rgba(255,255,255,0)",
+                  ],
+                },
+                transition: { duration: 2, repeat: Infinity, repeatDelay: 4 },
+              },
+              value
+            ),
+          ]
+        );
+      }
+
+      // Utilities
+      function formatScore(n) {
+        return new Intl.NumberFormat(undefined, {
+          maximumFractionDigits: 0,
+        }).format(n);
+      }
+
+      // Team avatar generator
+      const generateTeamAvatar = (teamName, rank) => {
+        const colors = [
+          "from-red-500 to-pink-500",
+          "from-blue-500 to-cyan-500",
+          "from-green-500 to-emerald-500",
+          "from-yellow-500 to-amber-500",
+          "from-purple-500 to-violet-500",
+          "from-orange-500 to-red-500",
+          "from-indigo-500 to-blue-500",
+          "from-teal-500 to-green-500",
+        ];
+        const initials = teamName
+          .split(" ")
+          .map((word) => word[0])
+          .join("")
+          .toUpperCase();
+        const colorIndex = teamName.length % colors.length;
+        return { initials, gradient: colors[colorIndex] };
+      };
+
+      function formatAgo(date) {
+        const secs = Math.max(
+          0,
+          Math.floor((Date.now() - date.getTime()) / 1000)
+        );
+        if (secs < 5) return "just now";
+        if (secs < 60) return `${secs}s ago`;
+        const m = Math.floor(secs / 60);
+        return `${m}m ago`;
+      }
+      function formatTime(date) {
+        return new Intl.DateTimeFormat(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(date);
+      }
+
+      // Demo data generator for fallback / local preview
+      function buildDemoData() {
+        const seed = [
+          { id: "alpha", name: "Alpha Wolves", score: 1920 },
+          { id: "bravo", name: "Bravo Ninjas", score: 1660 },
+          { id: "charlie", name: "Charlie Foxes", score: 1510 },
+          { id: "delta", name: "Delta Bytes", score: 1380 },
+          { id: "echo", name: "Echo Hunters", score: 1200 },
+          { id: "foxtrot", name: "Foxtrot Ops", score: 1180 },
+          { id: "golf", name: "Golf Rooters", score: 1100 },
+          { id: "hotel", name: "Hotel Pwners", score: 980 },
+        ];
+        // simulate drift
+        return seed.map((t) => ({
+          ...t,
+          score: t.score + Math.floor(Math.random() * 30),
+        }));
+      }
+
+      // Render the app
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(React.createElement(LiveCTFScoreboard));
+    </script>
+  </body>
+</html>
