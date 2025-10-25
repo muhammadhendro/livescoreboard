@@ -171,10 +171,24 @@
         window.framerMotion || window.Motion || window.FramerMotion || {};
       let { motion, AnimatePresence, LayoutGroup } = FM;
       if (!motion) {
+        console.warn("Framer Motion not found, using fallback");
         const shim = new Proxy(
           {},
           {
-            get: (_t, tag) => (props) => window.React.createElement(tag, props),
+            get: (_t, tag) => (props) => {
+              // Remove Framer Motion specific props
+              const {
+                animate,
+                transition,
+                whileHover,
+                whileTap,
+                initial,
+                exit,
+                layout,
+                ...restProps
+              } = props || {};
+              return window.React.createElement(tag, restProps);
+            },
           }
         );
         motion = shim;
@@ -344,10 +358,27 @@
 
         // Fetcher: supports CTFd-like and generic array payloads
         const parsePayload = (raw) => {
-          const arr = Array.isArray(raw)
-            ? raw
-            : raw?.data ?? raw?.scoreboard ?? raw?.standings ?? [];
-          if (!Array.isArray(arr)) return [];
+          console.log("Parsing payload:", raw);
+
+          // Handle the actual API response format from lappungctf.dev
+          let arr;
+          if (raw?.success && raw?.data && Array.isArray(raw.data)) {
+            console.log(
+              "Found success data array with",
+              raw.data.length,
+              "entries"
+            );
+            arr = raw.data;
+          } else if (Array.isArray(raw)) {
+            arr = raw;
+          } else {
+            arr = raw?.data ?? raw?.scoreboard ?? raw?.standings ?? [];
+          }
+
+          if (!Array.isArray(arr)) {
+            console.log("No valid array found");
+            return [];
+          }
 
           const norm = arr.map((it, idx) => {
             const id =
@@ -423,19 +454,47 @@
         const fetchScoreboard = async () => {
           try {
             setError("");
-            const res = await fetch(endpoint, { cache: "no-store" });
+            console.log("Fetching from:", endpoint);
+            const res = await fetch(endpoint, {
+              cache: "no-store",
+              mode: "cors",
+              headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+              },
+            }).catch(async (corsError) => {
+              console.log("CORS error, trying with no-cors mode:", corsError);
+              // Fallback to no-cors mode
+              return fetch(endpoint, {
+                cache: "no-store",
+                mode: "no-cors",
+              });
+            });
+            console.log("Response status:", res.status, res.statusText);
             if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
             const json = await res.json();
+            console.log("API Response:", json);
             let parsed = parsePayload(json);
+            console.log("Parsed data:", parsed);
 
             // If scoreboard is empty, try falling back to the users list
             if (!parsed.length) {
+              console.log(
+                "Scoreboard empty, trying users endpoint:",
+                usersEndpoint
+              );
               try {
                 const resUsers = await fetch(usersEndpoint, {
                   cache: "no-store",
                 });
+                console.log(
+                  "Users response status:",
+                  resUsers.status,
+                  resUsers.statusText
+                );
                 if (resUsers.ok) {
                   const jsonUsers = await resUsers.json();
+                  console.log("Users API Response:", jsonUsers);
                   const users = Array.isArray(jsonUsers)
                     ? jsonUsers
                     : jsonUsers?.data ?? [];
@@ -448,9 +507,12 @@
                       score: 0,
                       pos: i + 1,
                     }));
+                    console.log("Fallback users data:", parsed);
                   }
                 }
-              } catch {}
+              } catch (e) {
+                console.log("Users endpoint error:", e);
+              }
             }
 
             if (!parsed.length) throw new Error("Empty scoreboard data");
@@ -462,14 +524,42 @@
             setLoading(false);
           } catch (e) {
             console.warn("Scoreboard fetch error:", e);
-            setError(String(e?.message || e));
+
+            // Try alternative methods to get real data
+            console.log(
+              "API Error, trying alternative methods:",
+              e?.message || e
+            );
+
+            // Try using a CORS proxy
+            try {
+              console.log("Trying CORS proxy...");
+              const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(
+                endpoint
+              )}`;
+              const proxyRes = await fetch(proxyUrl);
+              if (proxyRes.ok) {
+                const proxyJson = await proxyRes.json();
+                console.log("Proxy response:", proxyJson);
+                let parsed = parsePayload(proxyJson);
+                if (parsed.length > 0) {
+                  pushHistory(parsed);
+                  updateTicker(parsed);
+                  setTeams(materialize(parsed));
+                  setLastUpdated(new Date());
+                  setLoading(false);
+                  setError("");
+                  return;
+                }
+              }
+            } catch (proxyError) {
+              console.log("Proxy also failed:", proxyError);
+            }
+
+            setError(`API Error: ${e?.message || e}`);
             setLoading(false);
-            // Fall back to demo data so the UI remains lively
-            const demo = buildDemoData();
-            pushHistory(demo);
-            updateTicker(demo);
-            setTeams(materialize(demo));
-            setLastUpdated(new Date());
+            setTeams([]);
+            setLastUpdated(null);
           }
         };
 
@@ -1037,13 +1127,39 @@
                 React.createElement(
                   "div",
                   {
-                    className:
-                      "text-sm text-red-300 bg-red-900/30 px-4 py-3 rounded-xl border-2 border-red-500/50 cyber-glow",
+                    className: error.includes("DEMO MODE")
+                      ? "text-sm text-cyan-300 bg-cyan-900/30 px-4 py-3 rounded-xl border-2 border-cyan-500/50 cyber-glow"
+                      : "text-sm text-red-300 bg-red-900/30 px-4 py-3 rounded-xl border-2 border-red-500/50 cyber-glow",
                     style: {
-                      textShadow: "0 0 10px rgba(255, 0, 0, 0.5)",
+                      textShadow: error.includes("DEMO MODE")
+                        ? "0 0 10px rgba(0, 255, 255, 0.5)"
+                        : "0 0 10px rgba(255, 0, 0, 0.5)",
                     },
                   },
-                  `⚠️ SYSTEM ERROR: ${error}`
+                  [
+                    React.createElement(
+                      "div",
+                      { key: "error-title" },
+                      error.includes("DEMO MODE")
+                        ? `🎮 ${error}`
+                        : `⚠️ SYSTEM ERROR: ${error}`
+                    ),
+                    !error.includes("DEMO MODE") &&
+                      React.createElement(
+                        "div",
+                        {
+                          key: "error-endpoint",
+                          className: "text-xs mt-2 opacity-75",
+                        },
+                        `Endpoint: https://lappungctf.dev/api/v1/scoreboard`
+                      ),
+                    !error.includes("DEMO MODE") &&
+                      React.createElement(
+                        "div",
+                        { key: "error-users", className: "text-xs opacity-75" },
+                        `Users: https://lappungctf.dev/api/v1/users`
+                      ),
+                  ].filter(Boolean)
                 )
               ),
           ]
@@ -2342,14 +2458,14 @@
       // Demo data generator for fallback / local preview
       function buildDemoData() {
         const seed = [
-          { id: "alpha", name: "Alpha Wolves", score: 1920 },
-          { id: "bravo", name: "Bravo Ninjas", score: 1660 },
-          { id: "charlie", name: "Charlie Foxes", score: 1510 },
-          { id: "delta", name: "Delta Bytes", score: 1380 },
-          { id: "echo", name: "Echo Hunters", score: 1200 },
-          { id: "foxtrot", name: "Foxtrot Ops", score: 1180 },
-          { id: "golf", name: "Golf Rooters", score: 1100 },
-          { id: "hotel", name: "Hotel Pwners", score: 980 },
+          { id: "team1", name: "Cyber Warriors", score: 1920 },
+          { id: "team2", name: "Lappung Hackers", score: 1660 },
+          { id: "team3", name: "Digital Ninjas", score: 1510 },
+          { id: "team4", name: "Code Breakers", score: 1380 },
+          { id: "team5", name: "Security Squad", score: 1200 },
+          { id: "team6", name: "Bug Hunters", score: 1180 },
+          { id: "team7", name: "Crypto Masters", score: 1100 },
+          { id: "team8", name: "Network Defenders", score: 980 },
         ];
         // simulate drift
         return seed.map((t) => ({
@@ -2358,9 +2474,133 @@
         }));
       }
 
+      // Error boundary component
+      function ErrorBoundary({ children }) {
+        const [hasError, setHasError] = React.useState(false);
+        const [error, setError] = React.useState(null);
+
+        React.useEffect(() => {
+          const handleError = (event) => {
+            console.error("React Error:", event);
+            setHasError(true);
+            setError(event.error || event.reason || event);
+          };
+
+          const handleUnhandledRejection = (event) => {
+            console.error("Unhandled Promise Rejection:", event);
+            setHasError(true);
+            setError(event.reason || event);
+          };
+
+          window.addEventListener("error", handleError);
+          window.addEventListener(
+            "unhandledrejection",
+            handleUnhandledRejection
+          );
+
+          return () => {
+            window.removeEventListener("error", handleError);
+            window.removeEventListener(
+              "unhandledrejection",
+              handleUnhandledRejection
+            );
+          };
+        }, []);
+
+        if (hasError) {
+          return React.createElement(
+            "div",
+            {
+              className:
+                "min-h-screen bg-black text-white flex items-center justify-center p-8",
+              style: { fontFamily: "monospace" },
+            },
+            [
+              React.createElement(
+                "h1",
+                {
+                  key: "title",
+                  className: "text-2xl font-bold text-red-400 mb-4",
+                },
+                "🚨 JavaScript Error"
+              ),
+              React.createElement(
+                "p",
+                { key: "msg", className: "text-gray-300 mb-2" },
+                "Scoreboard failed to load:"
+              ),
+              React.createElement(
+                "pre",
+                {
+                  key: "error",
+                  className:
+                    "bg-gray-900 p-4 rounded text-sm text-red-300 overflow-auto",
+                },
+                error
+                  ? error.message ||
+                      error.toString() ||
+                      JSON.stringify(error, null, 2)
+                  : "Unknown error"
+              ),
+              React.createElement(
+                "button",
+                {
+                  key: "retry",
+                  className:
+                    "mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700",
+                  onClick: () => window.location.reload(),
+                },
+                "🔄 Retry"
+              ),
+            ]
+          );
+        }
+
+        return children;
+      }
+
+      // Debug logging
+      console.log("=== DEBUG INFO ===");
+      console.log("React version:", React.version);
+      console.log("ReactDOM version:", ReactDOM.version);
+      console.log(
+        "Framer Motion:",
+        window.framerMotion || window.Motion || window.FramerMotion
+      );
+      console.log("Window location:", window.location.href);
+      console.log("User agent:", navigator.userAgent);
+      console.log("Document ready state:", document.readyState);
+      console.log("Root element:", document.getElementById("root"));
+      console.log("==================");
+
       // Render the app
-      const root = ReactDOM.createRoot(document.getElementById("root"));
-      root.render(React.createElement(LiveCTFScoreboard));
+      try {
+        const root = ReactDOM.createRoot(document.getElementById("root"));
+        console.log("Root element found:", document.getElementById("root"));
+        root.render(
+          React.createElement(
+            ErrorBoundary,
+            null,
+            React.createElement(LiveCTFScoreboard)
+          )
+        );
+        console.log("App rendered successfully");
+      } catch (error) {
+        console.error("Render error:", error);
+        document.getElementById("root").innerHTML = `
+          <div style="min-height: 100vh; background: black; color: white; display: flex; align-items: center; justify-content: center; font-family: monospace; padding: 2rem;">
+            <div>
+              <h1 style="color: red; margin-bottom: 1rem;">🚨 Render Error</h1>
+              <pre style="background: #333; padding: 1rem; border-radius: 0.5rem; color: #ff6b6b; white-space: pre-wrap; word-break: break-all;">${
+                error.message ||
+                error.toString() ||
+                JSON.stringify(error, null, 2)
+              }</pre>
+              <button onclick="window.location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #0066cc; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">🔄 Retry</button>
+            </div>
+          </div>
+        `;
+      }
     </script>
   </body>
 </html>
